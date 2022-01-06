@@ -196,7 +196,7 @@ class Command(object):
 
         self._exception = None
         self._loop = loop if loop is not None else get_running_loop()
-        self._event = asyncio.Event(loop=self._loop)
+        self._event = asyncio.Event()
         self._timeout = timeout
         self._timer = asyncio.Handle(lambda: None, None, self._loop)  # fake timer
         self._set_timer()
@@ -506,8 +506,7 @@ class IMAP4ClientProtocol(asyncio.Protocol):
         return response
     
     @change_state
-    @asyncio.coroutine 
-    def authenticate(self, mechanism, authobject):
+    async def authenticate(self, mechanism, authobject):
         """Authenticates to IMAP with the given authobject.
         Args:
             mechanism: Authentification mechanism like XOAUTH2 
@@ -516,12 +515,12 @@ class IMAP4ClientProtocol(asyncio.Protocol):
         """
         mech = mechanism.upper()
         self.literal_data = Authenticator(authobject).process
-        response = yield from self.execute(Command('AUTHENTICATE', self.new_tag(), mech, loop=self.loop))
+        response = await self.execute(Command('AUTHENTICATE', self.new_tag(), mech, loop=self.loop))
         if 'OK' == response.result:
             self.state = AUTH
             for line in response.lines:
-                if 'CAPABILITY' in line:
-                    self.capabilities = self.capabilities.union(set(line.replace('CAPABILITY', '').strip().split()))
+                if b'CAPABILITY' in line:
+                    self.capabilities = self.capabilities.union(set(line.decode().replace('CAPABILITY', '').strip().split()))
         return response
 
     @change_state
@@ -710,7 +709,7 @@ class IMAP4ClientProtocol(asyncio.Protocol):
     def _continuation(self, line: bytes) -> None:
         if self.pending_sync_command is None:
             log.info('server says %s (ignored)' % line)
-        elif self.pending_sync_command in ['APPEND', 'AUTHENTICATE']:
+        elif self.pending_sync_command.name in ['APPEND', 'AUTHENTICATE']:
             if self.literal_data is None:
                 Abort('asked for literal data but have no literal data to send')
             elif type(self.literal_data) is type(self._continuation):
@@ -896,11 +895,10 @@ class IMAP4_SSL(IMAP4):
     def create_client(self, host: str, port: int, loop: asyncio.AbstractEventLoop,
                       conn_lost_cb: Callable[[Optional[Exception]], None] = None, ssl_context: ssl.SSLContext = None) -> None:
         if ssl_context is None:
-            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         super().create_client(host, port, loop, conn_lost_cb, ssl_context)
    
-    @asyncio.coroutine
-    def xoauth2(self, username, access_token):
+    async def xoauth2(self, username, access_token):
         """IMAP OAuth2 authentication.
         Adapted from https://github.com/google/gmail-oauth2-tools/blob/master/python/oauth2.py
         See https://developers.google.com/google-apps/gmail/oauth2_overview
@@ -911,7 +909,7 @@ class IMAP4_SSL(IMAP4):
             The SASL argument for the OAuth2 mechanism.
         """
         auth_string = "user=%s\1auth=Bearer %s\1\1" % (username, access_token)
-        return (yield from asyncio.wait_for(self.protocol.authenticate('XOAUTH2', lambda x: auth_string), self.timeout))
+        return (await asyncio.wait_for(self.protocol.authenticate('XOAUTH2', lambda x: auth_string), self.timeout))
 
 
 # functions from imaplib
