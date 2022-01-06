@@ -323,7 +323,7 @@ class IMAP4ClientProtocol(asyncio.Protocol):
         self.pending_async_commands = dict()
         self.pending_sync_command = None
         self.idle_queue = asyncio.Queue()
-        self._idle_event = asyncio.Event(loop=loop)
+        self._idle_event = asyncio.Event()
         self.imap_version = None
         self.literal_data = None
         self.incomplete_line = b''
