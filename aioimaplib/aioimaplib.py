@@ -16,6 +16,7 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import asyncio
 import functools
+import binascii
 import logging
 import random
 import re
